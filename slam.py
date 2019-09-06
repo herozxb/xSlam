@@ -3,9 +3,8 @@ import os
 import time
 import sys
 
-sys.path.append("lib/macosx")
 sys.path.append("lib/linux")
-
+os.environ["PYSDL2_DLL_PATH"] = "/home/deep/deepLearning/PySDL2-0.9.5/"
 
 import cv2
 from display import Display
