@@ -4,7 +4,6 @@ import time
 import sys
 
 sys.path.append("lib/linux")
-os.environ["PYSDL2_DLL_PATH"] = "/home/deep/deepLearning/PySDL2-0.9.5/"
 
 import cv2
 from display import Display
@@ -43,6 +42,8 @@ def process_frame(img):
   frame = Frame(mapp, img, K)
   if frame.id == 0:
     return
+    
+  print("\n*** frame %d ***" % (frame.id,))
 
   f1 = mapp.frames[-1]
   f2 = mapp.frames[-2]
@@ -50,16 +51,23 @@ def process_frame(img):
   idx1, idx2, Rt = match_frames(f1, f2)
   #print("=============================", idx1, idx2, Rt,f1.pts,f2.pts)
   f1.pose = np.dot(Rt, f2.pose)
+  
+  for i,idx in enumerate(idx2):
+    if f2.pts[idx] is not None:
+      f2.pts[idx].add_observation(f1, idx1[i])
 
   # homogeneous 3-D coords
-  pts4d = triangulate(f1.pose, f2.pose, f1.pts[idx1], f2.pts[idx2])
+  pts4d = triangulate(f1.pose, f2.pose, f1.kps[idx1], f2.kps[idx2])
   pts4d /= pts4d[:, 3:]
   #print(pts4d)
 
   # reject pts without enough "parallax" (this right?)
   # reject points behind the camera
-  good_pts4d = (np.abs(pts4d[:, 3]) > 0.005) & (pts4d[:, 2] > 0)
+  unmatched_points = np.array([f1.pts[i] is None for i in idx1])
+  print("Adding:  %d points" % np.sum(unmatched_points))
+  good_pts4d = (np.abs(pts4d[:, 3]) > 0.005) & (pts4d[:, 2] > 0) & unmatched_points
   #print(sum(good_pts4d), len(good_pts4d))
+  #print(good_pts4d)
 
   for i,p in enumerate(pts4d):
     if not good_pts4d[i]:
@@ -68,7 +76,7 @@ def process_frame(img):
     pt.add_observation(f1, idx1[i])
     pt.add_observation(f2, idx2[i])
 
-  for pt1, pt2 in zip(f1.pts[idx1], f2.pts[idx2]):
+  for pt1, pt2 in zip(f1.kps[idx1], f2.kps[idx2]):
     u1, v1 = denormalize(K, pt1)
     u2, v2 = denormalize(K, pt2)
     cv2.circle(img, (u1, v1), color=(0,255,0), radius=3)
@@ -77,6 +85,11 @@ def process_frame(img):
   # 2-D display
   if disp is not None:
     disp.paint(img)
+
+  # optimize the map
+  if frame.id >= 4:
+    mapp.optimize()
+
 
   # 3-D display
   mapp.display()
